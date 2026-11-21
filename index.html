@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#181c22" media="(prefers-color-scheme: dark)">
+<meta name="description" content="A 5-day hypertrophy split for the gym: pick an option per slot, see a demo, log your weight.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Split Day">
+<title>Split Day</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column, sticky day bar on top, one card per slot. Day colors follow competition plate colors. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --sunk:#e4e8ed; --fg:#14181d; --muted:#5b6672; --line:#d6dce3;
+  --accent:#1f5fbf; --accent-fg:#ffffff; --ok:#2f9e55;
+  --p1:#d6332f; --p2:#1f5fbf; --p3:#d9a514; --p4:#2f9e55; --p5:#f7f8fa; --p5-line:#9aa5b1;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1216; --surface:#181c22; --sunk:#222831; --fg:#e9edf1; --muted:#9aa5b1; --line:#2b323b;
+  --accent:#5b97f2; --accent-fg:#0b1220; --ok:#46b86c; --p5:#e9edf1; --p5-line:#e9edf1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --surface:#181c22; --sunk:#222831; --fg:#e9edf1; --muted:#9aa5b1; --line:#2b323b;
+  --accent:#5b97f2; --accent-fg:#0b1220; --ok:#46b86c; --p5:#e9edf1; --p5-line:#e9edf1; color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:560px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+header .wrap{padding-block:10px;display:flex;flex-direction:column;gap:10px}
+.toprow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;text-transform:uppercase}
+.unit{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.unit button{border:0;background:none;color:var(--muted);font:600 13px var(--body);padding:6px 12px;cursor:pointer}
+.unit button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.days{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.days button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:6px 0 7px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font:600 12px var(--body)}
+.days button .plate{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 13px var(--display);color:#fff;border:2px solid transparent}
+.days button[data-d="5"] .plate{color:#14181d;border-color:var(--p5-line)}
+.days button[aria-current="true"]{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.days button .up{font-size:10px;color:var(--accent);height:12px;line-height:12px;text-transform:uppercase;letter-spacing:.06em}
+main .wrap{padding-block:18px 40px;display:flex;flex-direction:column;gap:14px}
+.dayhead h1{font-family:var(--display);font-weight:700;font-size:34px;line-height:1;margin:0;text-transform:uppercase;letter-spacing:.01em;text-wrap:balance}
+.dayhead p{margin:4px 0 0;color:var(--muted)}
+.progress{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{flex:1;height:6px;border-radius:3px;background:var(--sunk);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.card.done{border-color:var(--ok)}
+.chead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 14px 8px}
+.eyebrow{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.slot{font-family:var(--display);font-weight:700;font-size:21px;line-height:1.1;text-transform:uppercase}
+.sr{font:600 14px var(--body);white-space:nowrap;font-variant-numeric:tabular-nums}
+.opts{display:flex;gap:6px;overflow-x:auto;padding:0 14px 10px;scrollbar-width:none}
+.opts::-webkit-scrollbar{display:none}
+.opt{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:6px 10px 6px 6px;font:500 13px var(--body);cursor:pointer;display:flex;align-items:center;gap:6px;max-width:240px}
+.opt span.t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.opt[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.eq{font:700 10px var(--body);letter-spacing:.04em;border-radius:999px;padding:2px 6px;background:var(--sunk);color:var(--muted)}
+.opt[aria-pressed="true"] .eq{background:var(--bg);color:var(--fg)}
+.media{position:relative;background:#fff;aspect-ratio:3/2;max-width:100%;display:grid;place-items:center;border-block:1px solid var(--line)}
+.media img{width:100%;height:100%;object-fit:contain;display:block}
+.media .none{color:#5b6672;font-size:13px;padding:20px;text-align:center}
+.media .tag{position:absolute;left:8px;bottom:8px;background:rgba(20,24,29,.78);color:#fff;font-size:11px;padding:3px 8px;border-radius:6px}
+.body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
+.exname{font-weight:600;font-size:16px}
+.log{display:flex;align-items:stretch;gap:8px}
+.step{flex:1;min-width:0;display:flex;align-items:stretch;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
+.step button{flex:none;width:44px;border:0;background:none;color:var(--fg);font:600 22px var(--body);cursor:pointer}
+.step button:active{background:var(--sunk)}
+.step label{flex:1;min-width:0;display:flex;justify-content:flex-end;align-items:baseline;gap:4px;padding:0 4px;border-inline:1px solid var(--line)}
+.step input{width:100%;min-width:0;border:0;background:none;color:var(--fg);font:700 26px var(--display);text-align:right;padding:8px 0;font-variant-numeric:tabular-nums}
+.step input:focus{outline:none}
+.step .u{font-size:13px;color:var(--muted);padding-right:6px}
+.donebtn{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:12px;padding:12px 14px;font:600 14px var(--body);cursor:pointer;min-height:48px}
+.donebtn[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.last{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.last b{color:var(--fg);font-weight:600}
+details{font-size:14px}
+details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13px}
+details ol{margin:8px 0 0;padding-left:20px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.finish{border:0;border-radius:14px;padding:16px;background:var(--accent);color:var(--accent-fg);font:700 20px var(--display);text-transform:uppercase;letter-spacing:.04em;cursor:pointer}
+.note{font-size:12px;color:var(--muted);text-align:center}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:20}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+ .edit{border:0;background:none;color:var(--accent);font:600 13px var(--body);cursor:pointer;padding:4px 0}
+.cright{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.editor{padding:0 14px 14px;display:flex;flex-direction:column;gap:8px}
+.erow{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.erow .t{flex:1;min-width:0;font-size:14px}
+.erow button{border:0;background:none;color:var(--muted);font:600 18px var(--body);width:32px;height:32px;cursor:pointer;border-radius:8px}
+.erow button:active{background:var(--sunk)}
+.addrow{display:flex;gap:6px}
+.addrow input,.addrow select{min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:10px;font:500 15px var(--body)}
+.addrow input{flex:1}
+.btn{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:10px 14px;font:600 14px var(--body);cursor:pointer}
+.btn.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.erow2{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.backup{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.backup textarea{width:100%;min-height:90px;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);font:12px ui-monospace,Menlo,monospace;padding:8px}
+.backup .erow2{margin-top:8px}
+.backup p{margin:8px 0 0;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="toprow">
+      <div class="brand">Split Day</div>
+      <div class="unit" role="group" aria-label="Weight unit">
+        <button id="u-kg" type="button" data-u="kg">kg</button>
+        <button id="u-lb" type="button" data-u="lb">lb</button>
+      </div>
+    </div>
+    <nav class="days" id="days" aria-label="Training day"></nav>
+  </div>
+</header>
+<main><div class="wrap" id="main"><p class="note">Loading your plan…</p></div></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const PLATES=['var(--p1)','var(--p2)','var(--p3)','var(--p4)','var(--p5)'];
+const EQ={M:'Machine',C:'Cable',FW:'Free weight'};
+let DATA=null;
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
+const fmtDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString(undefined,{day:'numeric',month:'short'})};
+const LS='splitday.v1';
+
+let S={v:1,ts:0,unit:'kg',lastDay:0,sel:{},w:{},done:{},hist:{}};
+try{const r=localStorage.getItem(LS);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
+let view=((S.lastDay||0)%5)+1;
+
+/* ---------- persistence: this phone's browser storage ---------- */
+function save(){S.ts=Date.now();try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){toast('Could not save on this device')}}
+if(!S.custom)S.custom={};
+const editing=new Set();
+/* ---------- helpers ---------- */
+const stepSize=()=>S.unit==='kg'?2.5:5;
+const exKey=o=>slug(o.n);
+function lastEntry(k){const h=S.hist[k]||[];const t=today();for(let i=h.length-1;i>=0;i--)if(h[i][0]!==t)return h[i];return null}
+function setUnit(u){
+  if(u===S.unit)return;
+  const f=u==='lb'?2.20462:1/2.20462, r=u==='lb'?5:2.5;
+  for(const k in S.w)S.w[k]=Math.round(S.w[k]*f/r)*r;
+  for(const k in S.hist)S.hist[k]=S.hist[k].map(([d,w])=>[d,Math.round(w*f/r)*r]);
+  S.unit=u;save();render();
+}
+let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2200)}
+const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const k in attrs){if(k==='class')e.className=attrs[k];else if(k.startsWith('on'))e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!=null)e.setAttribute(k,attrs[k])}for(const c of kids)if(c!=null)e.append(c);return e};
+
+/* ---------- render ---------- */
+function renderDays(){
+  const nav=document.getElementById('days');nav.textContent='';
+  const next=((S.lastDay||0)%5)+1;
+  DATA.days.forEach((d,i)=>{
+    nav.append(el('button',{type:'button','data-d':d.day,'aria-current':String(view===d.day),'aria-label':'Day '+d.day+' '+d.name,onclick:()=>{view=d.day;render();scrollTo({top:0})}},
+      (()=>{const p=el('span',{class:'plate'},String(d.day));p.style.background=PLATES[i];return p})(),
+      el('span',{class:'up'},d.day===next?'Up next':'')));
+  });
+  document.querySelectorAll('.unit button').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.u===S.unit));b.onclick=()=>setUnit(b.dataset.u)});
+}
+function render(){
+  if(!DATA)return;
+  renderDays();
+  const d=DATA.days[view-1], t=today(), dn=S.done[t]||{};
+  const m=document.getElementById('main');m.textContent='';
+  const doneCount=d.slots.filter((_,i)=>dn['d'+view+'s'+i]).length;
+  const bar=el('i');bar.style.width=(100*doneCount/d.slots.length)+'%';
+  m.append(el('section',{class:'dayhead'},
+    el('div',{class:'eyebrow'},'Day '+d.day+' of 5'),
+    el('h1',{},d.name),
+    el('p',{},d.focus+' · '+d.slots.length+' movements'),
+    el('div',{class:'progress'},el('div',{class:'bar'},bar),el('span',{},doneCount+' / '+d.slots.length+' done today'))));
+  d.slots.forEach((s,i)=>m.append(slotCard(d,s,i,dn)));
+  m.append(el('button',{class:'finish',type:'button',onclick:finishDay},'Finish Day '+d.day));
+  m.append(backupBox());
+  m.append(el('p',{class:'note'},'Animations: free-exercise-db (public domain). Where a machine or cable version has no animation of its own, a close variation is shown and marked.'));
+}
+function slotCard(d,s,i,dn){
+  const id='d'+d.day+'s'+i;
+  const OPTS=S.custom[id]||s.o;
+  if(editing.has(id))return editCard(d,s,i,id,OPTS);
+  let sel=S.sel[id]??0; if(sel>=OPTS.length)sel=0;
+  const o=OPTS[sel]||{n:'No option',eq:'M'}, k=exKey(o);
+  const card=el('article',{class:'card'+(dn[id]?' done':'')});
+  card.append(el('div',{class:'chead'},
+    el('div',{},el('div',{class:'eyebrow'},s.m),el('div',{class:'slot'},s.s)),
+    el('div',{class:'cright'},el('div',{class:'sr'},s.sr),el('button',{type:'button',class:'edit',onclick:()=>{editing.add(id);rerender(card,d,s,i)}},'Edit options'))));
+  const opts=el('div',{class:'opts',role:'group','aria-label':'Options for '+s.s});
+  OPTS.forEach((op,j)=>opts.append(el('button',{type:'button',class:'opt','aria-pressed':String(j===sel),onclick:()=>{S.sel[id]=j;save();const n=slotCard(d,s,i,S.done[today()]||{});card.replaceWith(n);n.querySelector('.opt[aria-pressed="true"]').scrollIntoView({block:'nearest',inline:'nearest'})}},
+    el('span',{class:'eq'},op.eq),el('span',{class:'t'},op.n))));
+  card.append(opts);
+  const media=el('div',{class:'media'});
+  if(o.img){
+    media.append(el('img',{src:'img/'+o.img+'.webp',alt:o.n+' demonstration',loading:'lazy',decoding:'async'}));
+    if(o.ap)media.append(el('span',{class:'tag'},'Similar movement shown'));
+  }else media.append(el('div',{class:'none'},'No animation for this one yet. Pick another option to see a demo.'));
+  card.append(media);
+  const body=el('div',{class:'body'});
+  body.append(el('div',{class:'exname'},o.n+' · '+EQ[o.eq]));
+  const inp=el('input',{id:'w-'+id,type:'number',inputmode:'decimal',step:'any',min:'0','aria-label':'Weight for '+o.n,placeholder:'0',value:S.w[k]!=null?String(S.w[k]):''});
+  const setW=v=>{v=Math.max(0,Math.round(v*100)/100);inp.value=String(v);S.w[k]=v;if(dn[id])logHist(k,v);save()};
+  inp.addEventListener('change',()=>{const v=parseFloat(inp.value);if(isNaN(v)){delete S.w[k];save()}else setW(v)});
+  const cur=()=>parseFloat(inp.value)||0;
+  const doneBtn=el('button',{type:'button',class:'donebtn','aria-pressed':String(!!dn[id]),onclick:()=>{
+    const t=today();S.done[t]=S.done[t]||{};
+    if(S.done[t][id]){delete S.done[t][id];unlogHist(k)}else{S.done[t][id]=true;if(inp.value!=='')logHist(k,cur())}
+    pruneDone();save();render();}},dn[id]?'✓ Done':'Mark done');
+  body.append(el('div',{class:'log'},
+    el('div',{class:'step'},
+      el('button',{type:'button','aria-label':'Decrease weight',onclick:()=>setW(cur()-stepSize())},'−'),
+      el('label',{for:'w-'+id},inp,el('span',{class:'u'},S.unit)),
+      el('button',{type:'button','aria-label':'Increase weight',onclick:()=>setW(cur()+stepSize())},'+')),
+    doneBtn));
+  const le=lastEntry(k);
+  body.append(el('div',{class:'last'},...(le?['Last time: ',el('b',{},le[1]+' '+S.unit),' on '+fmtDate(le[0])]:['No history yet. Set your weight and tap Mark done to log it.'])));
+  const st=o.img&&!o.ap&&DATA.steps[o.img];
+  if(st){const ol=el('ol');st.forEach(x=>ol.append(el('li',{},x)));body.append(el('details',{},el('summary',{},'How to do it'),ol))}
+  card.append(body);
+  return card;
+}
+function rerender(card,d,s,i){const n=slotCard(d,s,i,S.done[today()]||{});card.replaceWith(n);return n}
+function editCard(d,s,i,id,OPTS){
+  const card=el('article',{class:'card'});
+  const list=OPTS.slice();
+  card.append(el('div',{class:'chead'},el('div',{},el('div',{class:'eyebrow'},s.m+' · editing'),el('div',{class:'slot'},s.s)),el('div',{class:'sr'},s.sr)));
+  const ed=el('div',{class:'editor'});
+  const commit=()=>{S.custom[id]=list.slice();const cur=S.sel[id]??0;if(cur>=list.length)S.sel[id]=0;save()};
+  list.forEach((op,j)=>ed.append(el('div',{class:'erow'},el('span',{class:'eq'},op.eq),el('span',{class:'t'},op.n),
+    el('button',{type:'button','aria-label':'Move up',disabled:j===0?'':null,onclick:()=>{[list[j-1],list[j]]=[list[j],list[j-1]];const sv=S.sel[id]??0;if(sv===j)S.sel[id]=j-1;else if(sv===j-1)S.sel[id]=j;commit();rerender(card,d,s,i)}},'↑'),
+    el('button',{type:'button','aria-label':'Remove '+op.n,onclick:()=>{if(list.length<=1){toast('Keep at least one option');return}list.splice(j,1);const sv=S.sel[id]??0;if(sv===j)S.sel[id]=0;else if(sv>j)S.sel[id]=sv-1;commit();rerender(card,d,s,i)}},'×'))));
+  const nm=el('input',{id:'add-'+id,type:'text',placeholder:'Add an exercise',maxlength:'60','aria-label':'New exercise name'});
+  const eq=el('select',{id:'eq-'+id,'aria-label':'Equipment'},el('option',{value:'M'},'M'),el('option',{value:'C'},'C'),el('option',{value:'FW'},'FW'));
+  const add=()=>{const v=nm.value.trim();if(!v)return;list.push({n:v,eq:eq.value});commit();const n=rerender(card,d,s,i);n.querySelector('input[type=text]')?.focus()};
+  nm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add()}});
+  ed.append(el('div',{class:'addrow'},nm,eq,el('button',{type:'button',class:'btn',onclick:add},'Add')));
+  ed.append(el('p',{class:'note',style:'text-align:left;margin:0'},'Exercises you add show without a demo. M = machine, C = cable, FW = free weight.'));
+  ed.append(el('div',{class:'erow2'},
+    el('button',{type:'button',class:'btn',onclick:()=>{delete S.custom[id];S.sel[id]=0;save();rerender(card,d,s,i)}},'Reset to default'),
+    el('button',{type:'button',class:'btn primary',onclick:()=>{editing.delete(id);rerender(card,d,s,i)}},'Done editing')));
+  card.append(ed);return card;
+}
+function backupBox(){
+  const ta=el('textarea',{id:'backup-text','aria-label':'Backup text',spellcheck:'false'});
+  const box=el('details',{class:'backup'},el('summary',{},'Back up or move your data'),
+    el('p',{},'Your weights and choices are saved on this phone only. Copy a backup before you clear your browser or switch phones, then paste it here on the new one.'),
+    ta,
+    el('div',{class:'erow2'},
+      el('button',{type:'button',class:'btn',onclick:async()=>{ta.value=JSON.stringify(S);ta.select();try{await navigator.clipboard.writeText(ta.value);toast('Backup copied')}catch(e){toast('Backup selected. Copy it.')}}},'Copy backup'),
+      el('button',{type:'button',class:'btn primary',onclick:()=>{try{const j=JSON.parse(ta.value);if(!j||typeof j!=='object'||!('w' in j))throw 0;S=Object.assign({v:1,ts:0,unit:'kg',lastDay:0,sel:{},w:{},done:{},hist:{},custom:{}},j);save();view=((S.lastDay||0)%5)+1;render();toast('Backup restored')}catch(e){toast('That doesn\'t look like a backup')}}},'Restore from text')));
+  return box;
+}
+function logHist(k,w){const t=today();const h=(S.hist[k]=S.hist[k]||[]);if(h.length&&h[h.length-1][0]===t)h[h.length-1][1]=w;else h.push([t,w]);if(h.length>40)h.splice(0,h.length-40)}
+function unlogHist(k){const h=S.hist[k];if(h&&h.length&&h[h.length-1][0]===today())h.pop()}
+function pruneDone(){const ks=Object.keys(S.done).sort();while(ks.length>14)delete S.done[ks.shift()]}
+function finishDay(){
+  S.lastDay=view;save();
+  const nd=(view%5)+1;toast('Day '+view+' finished. Day '+nd+' is up next.');
+  view=nd;render();scrollTo({top:0});
+}
+
+fetch('data.json').then(r=>r.json()).then(j=>{DATA=j;render()}).catch(()=>{document.getElementById('main').textContent='Could not load the plan. Reload the page to try again.'});
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
