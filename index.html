@@ -19,17 +19,17 @@
 /* Layout: one narrow column, sticky day bar on top, one card per slot. Day colors follow competition plate colors. */
 :root{
   --bg:#eef1f4; --surface:#ffffff; --sunk:#e4e8ed; --fg:#14181d; --muted:#5b6672; --line:#d6dce3;
-  --accent:#1f5fbf; --accent-fg:#ffffff; --ok:#2f9e55;
+  --accent:#1f5fbf; --accent-fg:#ffffff; --ok:#2f9e55; --warn:#d9a514; --bad:#d6332f;
   --p1:#d6332f; --p2:#1f5fbf; --p3:#d9a514; --p4:#2f9e55; --p5:#f7f8fa; --p5-line:#9aa5b1;
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0f1216; --surface:#181c22; --sunk:#222831; --fg:#e9edf1; --muted:#9aa5b1; --line:#2b323b;
-  --accent:#5b97f2; --accent-fg:#0b1220; --ok:#46b86c; --p5:#e9edf1; --p5-line:#e9edf1; color-scheme:dark}}
+  --accent:#5b97f2; --accent-fg:#0b1220; --ok:#46b86c; --warn:#e7b416; --bad:#e5534b; --p5:#e9edf1; --p5-line:#e9edf1; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1216; --surface:#181c22; --sunk:#222831; --fg:#e9edf1; --muted:#9aa5b1; --line:#2b323b;
-  --accent:#5b97f2; --accent-fg:#0b1220; --ok:#46b86c; --p5:#e9edf1; --p5-line:#e9edf1; color-scheme:dark}
+  --accent:#5b97f2; --accent-fg:#0b1220; --ok:#46b86c; --warn:#e7b416; --bad:#e5534b; --p5:#e9edf1; --p5-line:#e9edf1; color-scheme:dark}
 *{box-sizing:border-box}
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0}img{max-width:100%}[hidden]{display:none!important}
@@ -111,6 +111,31 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
 .backup textarea{width:100%;min-height:90px;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);font:12px ui-monospace,Menlo,monospace;padding:8px}
 .backup .erow2{margin-top:8px}
 .backup p{margin:8px 0 0;font-size:13px;color:var(--muted)}
+.days{grid-template-columns:repeat(7,1fr)!important;gap:4px!important}
+.days button{padding:5px 0 6px!important;border-radius:9px!important}
+.days .dow{font-size:11px;font-weight:600;color:var(--muted)}
+.days button[aria-current="true"] .dow{color:var(--fg)}
+.days .plate.alt{background:var(--sunk);color:var(--fg);font-size:12px}
+.sect{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.sect h2{margin:0;font-family:var(--display);font-weight:700;font-size:24px;text-transform:uppercase;line-height:1.05}
+.snote{margin:0;font-size:13px;color:var(--muted)}
+.snote.in{margin:0}
+.rx{font-size:14px;font-weight:600;color:var(--accent)}
+.donebtn.wide{flex:1}
+.rec{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.rec.r-g{border-color:var(--ok)}.rec.r-m{border-color:var(--warn)}.rec.r-l{border-color:var(--bad)}
+.rec p{margin:0;font-size:14px}
+.rtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rnote{font-size:11px;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:10px 4px;font:600 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
+.rec.r-g .seg button[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.rec.r-m .seg button[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#1a1300}
+.rec.r-l .seg button[aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:#fff}
+details.moved{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+details.moved[open]>*+*{margin-top:12px}
+details.moved summary{font:600 14px var(--body);color:var(--muted);cursor:pointer}
+.restcard .body{gap:6px}
 </style>
 </head>
 <body>
@@ -133,75 +158,138 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
 <script>
 const PLATES=['var(--p1)','var(--p2)','var(--p3)','var(--p4)','var(--p5)'];
 const EQ={M:'Machine',C:'Cable',FW:'Free weight'};
+const DOW_FULL={Mon:'Monday',Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday',Sun:'Sunday'};
 let DATA=null;
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const todayIdx=()=>(new Date().getDay()+6)%7;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
 const fmtDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString(undefined,{day:'numeric',month:'short'})};
 const LS='splitday.v1';
+const BLANK=()=>({v:2,ts:0,unit:'kg',lastDay:0,sel:{},w:{},done:{},hist:{},custom:{},rec:{}});
 
-let S={v:1,ts:0,unit:'kg',lastDay:0,sel:{},w:{},done:{},hist:{}};
+let S=BLANK();
 try{const r=localStorage.getItem(LS);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
-let view=((S.lastDay||0)%5)+1;
+if(!S.custom)S.custom={}; if(!S.rec)S.rec={};
+let view=todayIdx();
 
-/* ---------- persistence: this phone's browser storage ---------- */
 function save(){S.ts=Date.now();try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){toast('Could not save on this device')}}
-if(!S.custom)S.custom={};
 const editing=new Set();
-/* ---------- helpers ---------- */
-const stepSize=()=>S.unit==='kg'?2.5:5;
-const exKey=o=>slug(o.n);
+const stepFor=log=>log==='min'?5:(S.unit==='kg'?2.5:5);
+const unitFor=log=>log==='min'?'min':S.unit;
+const exKey=(o,log)=>(log==='min'?'min:':'')+slug(o.n);
 function lastEntry(k){const h=S.hist[k]||[];const t=today();for(let i=h.length-1;i>=0;i--)if(h[i][0]!==t)return h[i];return null}
 function setUnit(u){
   if(u===S.unit)return;
   const f=u==='lb'?2.20462:1/2.20462, r=u==='lb'?5:2.5;
-  for(const k in S.w)S.w[k]=Math.round(S.w[k]*f/r)*r;
-  for(const k in S.hist)S.hist[k]=S.hist[k].map(([d,w])=>[d,Math.round(w*f/r)*r]);
+  for(const k in S.w)if(!k.startsWith('min:'))S.w[k]=Math.round(S.w[k]*f/r)*r;
+  for(const k in S.hist)if(!k.startsWith('min:'))S.hist[k]=S.hist[k].map(([d,w])=>[d,Math.round(w*f/r)*r]);
   S.unit=u;save();render();
 }
-let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2200)}
+let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2400)}
 const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const k in attrs){if(k==='class')e.className=attrs[k];else if(k.startsWith('on'))e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!=null)e.setAttribute(k,attrs[k])}for(const c of kids)if(c!=null)e.append(c);return e};
 
-/* ---------- render ---------- */
+/* ---------- day tabs ---------- */
 function renderDays(){
   const nav=document.getElementById('days');nav.textContent='';
-  const next=((S.lastDay||0)%5)+1;
-  DATA.days.forEach((d,i)=>{
-    nav.append(el('button',{type:'button','data-d':d.day,'aria-current':String(view===d.day),'aria-label':'Day '+d.day+' '+d.name,onclick:()=>{view=d.day;render();scrollTo({top:0})}},
-      (()=>{const p=el('span',{class:'plate'},String(d.day));p.style.background=PLATES[i];return p})(),
-      el('span',{class:'up'},d.day===next?'Up next':'')));
+  const ti=todayIdx();
+  DATA.week.forEach((w,i)=>{
+    const p=el('span',{class:'plate'+(w.lift?'':' alt')},w.lift?String(w.lift):(w.extras.length?'♥':'–'));
+    if(w.lift)p.style.background=PLATES[w.lift-1];
+    nav.append(el('button',{type:'button','data-d':w.lift||'','aria-current':String(view===i),'aria-label':DOW_FULL[w.dow]+(w.lift?' Day '+w.lift:' '+w.name),onclick:()=>{view=i;render();scrollTo({top:0})}},
+      el('span',{class:'dow'},w.dow),p,el('span',{class:'up'},i===ti?'Today':'')));
   });
   document.querySelectorAll('.unit button').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.u===S.unit));b.onclick=()=>setUnit(b.dataset.u)});
 }
+
+/* ---------- recovery ---------- */
+const REC=[['g','65%+'],['m','50–64%'],['l','Under 50%']];
+function recoveryCard(w){
+  const t=today(), r=S.rec[t]||null, isToday=view===todayIdx();
+  const advice={
+    g:'Train as planned. Optional finishers are on.',
+    m:w.lift?'Lift as planned, but stop every set 2–3 reps short of failure. Skip finishers.':'Swap the intervals for easy Zone 2 today.',
+    l:w.lift?'Skip the heavy lift. Do 30–45 min of Zone 2 instead, and do this lift tomorrow.':'Keep it easy: Zone 2 only, or rest.'
+  };
+  const box=el('section',{class:'rec'+(r?' r-'+r:'')},
+    el('div',{class:'rtop'},el('div',{class:'eyebrow'},'Recovery score today'),
+      null),
+    el('div',{class:'seg',role:'group','aria-label':'Recovery score'},...REC.map(([v,l])=>el('button',{type:'button','aria-pressed':String(r===v),onclick:()=>{if(S.rec[t]===v)delete S.rec[t];else S.rec[t]=v;const ks=Object.keys(S.rec).sort();while(ks.length>30)delete S.rec[ks.shift()];save();render()}},l))),
+    el('p',{},r?advice[r]:'Check your watch each morning and tap your score. The plan adjusts.'));
+  return box;
+}
+const recNow=()=>view===todayIdx()?(S.rec[today()]||null):null;
+
+/* ---------- render ---------- */
 function render(){
   if(!DATA)return;
   renderDays();
-  const d=DATA.days[view-1], t=today(), dn=S.done[t]||{};
+  const w=DATA.week[view], d=w.lift?DATA.days[w.lift-1]:null, t=today(), dn=S.done[t]||{}, r=recNow();
   const m=document.getElementById('main');m.textContent='';
-  const doneCount=d.slots.filter((_,i)=>dn['d'+view+'s'+i]).length;
-  const bar=el('i');bar.style.width=(100*doneCount/d.slots.length)+'%';
-  m.append(el('section',{class:'dayhead'},
-    el('div',{class:'eyebrow'},'Day '+d.day+' of 5'),
-    el('h1',{},d.name),
-    el('p',{},d.focus+' · '+d.slots.length+' movements'),
-    el('div',{class:'progress'},el('div',{class:'bar'},bar),el('span',{},doneCount+' / '+d.slots.length+' done today'))));
-  d.slots.forEach((s,i)=>m.append(slotCard(d,s,i,dn)));
-  m.append(el('button',{class:'finish',type:'button',onclick:finishDay},'Finish Day '+d.day));
-  m.append(backupBox());
-  m.append(el('p',{class:'note'},'Animations: free-exercise-db (public domain). Where a machine or cable version has no animation of its own, a close variation is shown and marked.'));
+  const tracked=[];
+  const head=el('section',{class:'dayhead'},
+    el('div',{class:'eyebrow'},DOW_FULL[w.dow]+(d?' · Day '+d.day+' of 5':'')),
+    el('h1',{},d?d.name:w.name),
+    el('p',{},d?d.focus+' · '+d.slots.length+' lifts':w.focus));
+  m.append(head);
+  if(w.dow==='Sun'){
+    m.append(el('section',{class:'card restcard'},el('div',{class:'body'},
+      el('div',{class:'slot'},'Full rest'),
+      el('p',{class:'last'},'No lifting and no cardio today. If Thursday\'s Zone 2 got skipped because your legs felt heavy, you can do it today instead.'))));
+    m.append(backupBox());m.append(credits());return;
+  }
+  if(view===todayIdx())m.append(recoveryCard(w));
+  // Low recovery on a lift day: Zone 2 replaces the lift
+  const swapLift=d&&r==='l';
+  if(swapLift){
+    m.append(sectHead('Instead of lifting','Zone 2 cardio'));
+    const id='x-z2swap-0';tracked.push(id);m.append(slotCard(id,DATA.z2swap,dn));
+  }
+  if(d){
+    const liftWrap=swapLift?el('details',{class:'moved'},el('summary',{},'Today\'s lift (do it tomorrow)')):m;
+    if(!swapLift)m.append(sectHead('Lifting',d.name));
+    d.slots.forEach((s,i)=>{const id='d'+d.day+'s'+i;if(!swapLift)tracked.push(id);liftWrap.append(slotCard(id,s,dn))});
+    if(w.absNote)liftWrap.append(el('p',{class:'snote'},w.absNote));
+    if(swapLift)m.append(liftWrap);
+  }
+  w.extras.forEach(x=>{
+    if(x.kind==='finisher'){
+      m.append(sectHead('Optional · 8–12 min',x.title));
+      if(r==='m'||r==='l'){m.append(el('p',{class:'snote'},'Skip it today. Finishers are only for days when recovery is 65% or higher.'));return}
+      if(swapLift)return;
+      m.append(el('p',{class:'snote'},'Only on days when recovery is 65% or higher.'));
+      x.slots.forEach((s,i)=>m.append(slotCard('x-'+x.key+'-'+i,s,dn)));
+      return;
+    }
+    if(x.kind==='intervals'&&(r==='m'||r==='l')){
+      m.append(sectHead('Swapped for today','Zone 2 cardio'));
+      const id='x-z2swap-0';tracked.push(id);m.append(slotCard(id,DATA.z2swap,dn));return;
+    }
+    if(swapLift&&x.kind==='cardio')return;
+    m.append(sectHead(x.kind==='abs'?'About 10 min after lifting':x.kind==='cardio'?'After lifting':'Cardio',x.title));
+    x.slots.forEach((s,i)=>{const id='x-'+x.key+'-'+i;tracked.push(id);m.append(slotCard(id,s,dn))});
+  });
+  const doneCount=tracked.filter(id=>dn[id]).length;
+  const bar=el('i');bar.style.width=(tracked.length?100*doneCount/tracked.length:0)+'%';
+  head.append(el('div',{class:'progress'},el('div',{class:'bar'},bar),el('span',{},doneCount+' / '+tracked.length+' done today')));
+  m.append(el('button',{class:'finish',type:'button',onclick:finishDay},'Finish '+DOW_FULL[w.dow]));
+  m.append(backupBox());m.append(credits());
 }
-function slotCard(d,s,i,dn){
-  const id='d'+d.day+'s'+i;
+const sectHead=(eb,title)=>el('div',{class:'sect'},el('div',{class:'eyebrow'},eb),el('h2',{},title));
+const credits=()=>el('p',{class:'note'},'Animations: free-exercise-db (public domain). Where a machine or cable version has no animation of its own, a close variation is shown and marked.');
+
+function slotCard(id,s,dn){
+  const log=s.log||'kg';
   const OPTS=S.custom[id]||s.o;
-  if(editing.has(id))return editCard(d,s,i,id,OPTS);
+  if(editing.has(id))return editCard(id,s,OPTS);
   let sel=S.sel[id]??0; if(sel>=OPTS.length)sel=0;
-  const o=OPTS[sel]||{n:'No option',eq:'M'}, k=exKey(o);
+  const o=OPTS[sel]||{n:'No option',eq:'M'}, k=exKey(o,log);
   const card=el('article',{class:'card'+(dn[id]?' done':'')});
   card.append(el('div',{class:'chead'},
     el('div',{},el('div',{class:'eyebrow'},s.m),el('div',{class:'slot'},s.s)),
-    el('div',{class:'cright'},el('div',{class:'sr'},s.sr),el('button',{type:'button',class:'edit',onclick:()=>{editing.add(id);rerender(card,d,s,i)}},'Edit options'))));
+    el('div',{class:'cright'},el('div',{class:'sr'},s.sr),el('button',{type:'button',class:'edit',onclick:()=>{editing.add(id);rerender(card,id,s)}},'Edit options'))));
   const opts=el('div',{class:'opts',role:'group','aria-label':'Options for '+s.s});
-  OPTS.forEach((op,j)=>opts.append(el('button',{type:'button',class:'opt','aria-pressed':String(j===sel),onclick:()=>{S.sel[id]=j;save();const n=slotCard(d,s,i,S.done[today()]||{});card.replaceWith(n);n.querySelector('.opt[aria-pressed="true"]').scrollIntoView({block:'nearest',inline:'nearest'})}},
-    el('span',{class:'eq'},op.eq),el('span',{class:'t'},op.n))));
+  OPTS.forEach((op,j)=>opts.append(el('button',{type:'button',class:'opt','aria-pressed':String(j===sel),onclick:()=>{S.sel[id]=j;save();const n=rerender(card,id,s);n.querySelector('.opt[aria-pressed="true"]').scrollIntoView({block:'nearest',inline:'nearest'})}},
+    el('span',{class:'eq'},op.eq),el('span',{class:'t'},op.n.split(' · ')[0]))));
   card.append(opts);
   const media=el('div',{class:'media'});
   if(o.img){
@@ -210,69 +298,76 @@ function slotCard(d,s,i,dn){
   }else media.append(el('div',{class:'none'},'No animation for this one yet. Pick another option to see a demo.'));
   card.append(media);
   const body=el('div',{class:'body'});
-  body.append(el('div',{class:'exname'},o.n+' · '+EQ[o.eq]));
-  const inp=el('input',{id:'w-'+id,type:'number',inputmode:'decimal',step:'any',min:'0','aria-label':'Weight for '+o.n,placeholder:'0',value:S.w[k]!=null?String(S.w[k]):''});
-  const setW=v=>{v=Math.max(0,Math.round(v*100)/100);inp.value=String(v);S.w[k]=v;if(dn[id])logHist(k,v);save()};
-  inp.addEventListener('change',()=>{const v=parseFloat(inp.value);if(isNaN(v)){delete S.w[k];save()}else setW(v)});
-  const cur=()=>parseFloat(inp.value)||0;
-  const doneBtn=el('button',{type:'button',class:'donebtn','aria-pressed':String(!!dn[id]),onclick:()=>{
+  const [nm,rx]=o.n.split(' · ');
+  body.append(el('div',{class:'exname'},nm+' · '+EQ[o.eq]));
+  if(rx)body.append(el('div',{class:'rx'},rx));
+  if(s.note)body.append(el('p',{class:'snote in'},s.note));
+  const doneBtn=(extra)=>el('button',{type:'button',class:'donebtn'+(log==='none'?' wide':''),'aria-pressed':String(!!dn[id]),onclick:()=>{
     const t=today();S.done[t]=S.done[t]||{};
-    if(S.done[t][id]){delete S.done[t][id];unlogHist(k)}else{S.done[t][id]=true;if(inp.value!=='')logHist(k,cur())}
+    if(S.done[t][id]){delete S.done[t][id];if(log!=='none')unlogHist(k)}else{S.done[t][id]=true;extra&&extra()}
     pruneDone();save();render();}},dn[id]?'✓ Done':'Mark done');
-  body.append(el('div',{class:'log'},
-    el('div',{class:'step'},
-      el('button',{type:'button','aria-label':'Decrease weight',onclick:()=>setW(cur()-stepSize())},'−'),
-      el('label',{for:'w-'+id},inp,el('span',{class:'u'},S.unit)),
-      el('button',{type:'button','aria-label':'Increase weight',onclick:()=>setW(cur()+stepSize())},'+')),
-    doneBtn));
-  const le=lastEntry(k);
-  body.append(el('div',{class:'last'},...(le?['Last time: ',el('b',{},le[1]+' '+S.unit),' on '+fmtDate(le[0])]:['No history yet. Set your weight and tap Mark done to log it.'])));
+  if(log==='none'){
+    body.append(el('div',{class:'log'},doneBtn()));
+  }else{
+    const u=unitFor(log);
+    const inp=el('input',{id:'w-'+id,type:'number',inputmode:'decimal',step:'any',min:'0','aria-label':(log==='min'?'Minutes for ':'Weight for ')+nm,placeholder:'0',value:S.w[k]!=null?String(S.w[k]):''});
+    const cur=()=>parseFloat(inp.value)||0;
+    const setW=v=>{v=Math.max(0,Math.round(v*100)/100);inp.value=String(v);S.w[k]=v;if(dn[id])logHist(k,v);save()};
+    inp.addEventListener('change',()=>{const v=parseFloat(inp.value);if(isNaN(v)){delete S.w[k];save()}else setW(v)});
+    body.append(el('div',{class:'log'},
+      el('div',{class:'step'},
+        el('button',{type:'button','aria-label':'Decrease',onclick:()=>setW(cur()-stepFor(log))},'−'),
+        el('label',{for:'w-'+id},inp,el('span',{class:'u'},u)),
+        el('button',{type:'button','aria-label':'Increase',onclick:()=>setW(cur()+stepFor(log))},'+')),
+      doneBtn(()=>{if(inp.value!=='')logHist(k,cur())})));
+    const le=lastEntry(k);
+    body.append(el('div',{class:'last'},...(le?['Last time: ',el('b',{},le[1]+' '+u),' on '+fmtDate(le[0])]:[log==='min'?'Set your minutes and tap Mark done to log it.':'No history yet. Set your weight and tap Mark done to log it.'])));
+  }
   const st=o.img&&!o.ap&&DATA.steps[o.img];
   if(st){const ol=el('ol');st.forEach(x=>ol.append(el('li',{},x)));body.append(el('details',{},el('summary',{},'How to do it'),ol))}
   card.append(body);
   return card;
 }
-function rerender(card,d,s,i){const n=slotCard(d,s,i,S.done[today()]||{});card.replaceWith(n);return n}
-function editCard(d,s,i,id,OPTS){
+function rerender(card,id,s){const n=slotCard(id,s,S.done[today()]||{});card.replaceWith(n);return n}
+function editCard(id,s,OPTS){
   const card=el('article',{class:'card'});
   const list=OPTS.slice();
   card.append(el('div',{class:'chead'},el('div',{},el('div',{class:'eyebrow'},s.m+' · editing'),el('div',{class:'slot'},s.s)),el('div',{class:'sr'},s.sr)));
   const ed=el('div',{class:'editor'});
   const commit=()=>{S.custom[id]=list.slice();const cur=S.sel[id]??0;if(cur>=list.length)S.sel[id]=0;save()};
   list.forEach((op,j)=>ed.append(el('div',{class:'erow'},el('span',{class:'eq'},op.eq),el('span',{class:'t'},op.n),
-    el('button',{type:'button','aria-label':'Move up',disabled:j===0?'':null,onclick:()=>{[list[j-1],list[j]]=[list[j],list[j-1]];const sv=S.sel[id]??0;if(sv===j)S.sel[id]=j-1;else if(sv===j-1)S.sel[id]=j;commit();rerender(card,d,s,i)}},'↑'),
-    el('button',{type:'button','aria-label':'Remove '+op.n,onclick:()=>{if(list.length<=1){toast('Keep at least one option');return}list.splice(j,1);const sv=S.sel[id]??0;if(sv===j)S.sel[id]=0;else if(sv>j)S.sel[id]=sv-1;commit();rerender(card,d,s,i)}},'×'))));
+    el('button',{type:'button','aria-label':'Move up',disabled:j===0?'':null,onclick:()=>{[list[j-1],list[j]]=[list[j],list[j-1]];const sv=S.sel[id]??0;if(sv===j)S.sel[id]=j-1;else if(sv===j-1)S.sel[id]=j;commit();rerender(card,id,s)}},'↑'),
+    el('button',{type:'button','aria-label':'Remove '+op.n,onclick:()=>{if(list.length<=1){toast('Keep at least one option');return}list.splice(j,1);const sv=S.sel[id]??0;if(sv===j)S.sel[id]=0;else if(sv>j)S.sel[id]=sv-1;commit();rerender(card,id,s)}},'×'))));
   const nm=el('input',{id:'add-'+id,type:'text',placeholder:'Add an exercise',maxlength:'60','aria-label':'New exercise name'});
   const eq=el('select',{id:'eq-'+id,'aria-label':'Equipment'},el('option',{value:'M'},'M'),el('option',{value:'C'},'C'),el('option',{value:'FW'},'FW'));
-  const add=()=>{const v=nm.value.trim();if(!v)return;list.push({n:v,eq:eq.value});commit();const n=rerender(card,d,s,i);n.querySelector('input[type=text]')?.focus()};
+  const add=()=>{const v=nm.value.trim();if(!v)return;list.push({n:v,eq:eq.value});commit();const n=rerender(card,id,s);n.querySelector('input[type=text]')?.focus()};
   nm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add()}});
   ed.append(el('div',{class:'addrow'},nm,eq,el('button',{type:'button',class:'btn',onclick:add},'Add')));
   ed.append(el('p',{class:'note',style:'text-align:left;margin:0'},'Exercises you add show without a demo. M = machine, C = cable, FW = free weight.'));
   ed.append(el('div',{class:'erow2'},
-    el('button',{type:'button',class:'btn',onclick:()=>{delete S.custom[id];S.sel[id]=0;save();rerender(card,d,s,i)}},'Reset to default'),
-    el('button',{type:'button',class:'btn primary',onclick:()=>{editing.delete(id);rerender(card,d,s,i)}},'Done editing')));
+    el('button',{type:'button',class:'btn',onclick:()=>{delete S.custom[id];S.sel[id]=0;save();rerender(card,id,s)}},'Reset to default'),
+    el('button',{type:'button',class:'btn primary',onclick:()=>{editing.delete(id);rerender(card,id,s)}},'Done editing')));
   card.append(ed);return card;
 }
 function backupBox(){
   const ta=el('textarea',{id:'backup-text','aria-label':'Backup text',spellcheck:'false'});
-  const box=el('details',{class:'backup'},el('summary',{},'Back up or move your data'),
+  return el('details',{class:'backup'},el('summary',{},'Back up or move your data'),
     el('p',{},'Your weights and choices are saved on this phone only. Copy a backup before you clear your browser or switch phones, then paste it here on the new one.'),
     ta,
     el('div',{class:'erow2'},
       el('button',{type:'button',class:'btn',onclick:async()=>{ta.value=JSON.stringify(S);ta.select();try{await navigator.clipboard.writeText(ta.value);toast('Backup copied')}catch(e){toast('Backup selected. Copy it.')}}},'Copy backup'),
-      el('button',{type:'button',class:'btn primary',onclick:()=>{try{const j=JSON.parse(ta.value);if(!j||typeof j!=='object'||!('w' in j))throw 0;S=Object.assign({v:1,ts:0,unit:'kg',lastDay:0,sel:{},w:{},done:{},hist:{},custom:{}},j);save();view=((S.lastDay||0)%5)+1;render();toast('Backup restored')}catch(e){toast('That doesn\'t look like a backup')}}},'Restore from text')));
-  return box;
+      el('button',{type:'button',class:'btn primary',onclick:()=>{try{const j=JSON.parse(ta.value);if(!j||typeof j!=='object'||!('w' in j))throw 0;S=Object.assign(BLANK(),j);if(!S.rec)S.rec={};if(!S.custom)S.custom={};save();render();toast('Backup restored')}catch(e){toast('That doesn\'t look like a backup')}}},'Restore from text')));
 }
 function logHist(k,w){const t=today();const h=(S.hist[k]=S.hist[k]||[]);if(h.length&&h[h.length-1][0]===t)h[h.length-1][1]=w;else h.push([t,w]);if(h.length>40)h.splice(0,h.length-40)}
 function unlogHist(k){const h=S.hist[k];if(h&&h.length&&h[h.length-1][0]===today())h.pop()}
 function pruneDone(){const ks=Object.keys(S.done).sort();while(ks.length>14)delete S.done[ks.shift()]}
 function finishDay(){
-  S.lastDay=view;save();
-  const nd=(view%5)+1;toast('Day '+view+' finished. Day '+nd+' is up next.');
-  view=nd;render();scrollTo({top:0});
+  const w=DATA.week[view];if(w.lift)S.lastDay=w.lift;save();
+  const nx=(view+1)%7;toast(DOW_FULL[w.dow]+' done. Next up: '+DOW_FULL[DATA.week[nx].dow]+'.');
+  view=nx;render();scrollTo({top:0});
 }
 
-fetch('data.json').then(r=>r.json()).then(j=>{DATA=j;render()}).catch(()=>{document.getElementById('main').textContent='Could not load the plan. Reload the page to try again.'});
+fetch('data.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{DATA=j;render()}).catch(()=>{document.getElementById('main').textContent='Could not load the plan. Reload the page to try again.'});
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body>
