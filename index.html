@@ -165,6 +165,8 @@ details.moved summary{font:600 14px var(--body);color:var(--muted);cursor:pointe
 .rest.over{background:var(--ok);color:#fff}
 .rest.over .rbar i{background:#fff}
 body.resting main .wrap{padding-bottom:120px}
+.sharebtn{min-height:48px;font-size:15px}
+.sharebox{width:100%;min-height:180px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px}
 </style>
 </head>
 <body>
@@ -268,6 +270,55 @@ function adjustRest(d){if(!T.end)return;if(T.end<Date.now())T.end=Date.now();T.e
 try{const r=JSON.parse(sessionStorage.getItem('splitday.rest')||'null');if(r&&r.end>Date.now()){T.end=r.end;T.total=r.total;T.label=r.label;T.iv=setInterval(tick,250)}}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 
+
+/* ---------- share today's workout ---------- */
+function allSlots(){
+  const out=[];
+  DATA.days.forEach(d=>d.slots.forEach((s,i)=>out.push({id:'d'+d.day+'s'+i,s,day:d})));
+  DATA.week.forEach(w=>w.extras.forEach(x=>x.slots.forEach((s,i)=>out.push({id:'x-'+x.key+'-'+i,s,x}))));
+  out.push({id:'x-z2swap-0',s:DATA.z2swap,swap:true});
+  return out;
+}
+function buildSummary(){
+  const t=today(), sets=(S.sets||{})[t]||{}, dn=S.done[t]||{}, lines=[];
+  const dt=new Date();const w=DATA.week[todayIdx()];
+  const recTxt={g:'65% or higher',m:'50–64%',l:'under 50%'}[S.rec[t]];
+  let liftDays=new Set();
+  const body=[];
+  allSlots().forEach(({id,s,day})=>{
+    const log=s.log||'kg';const OPTS=S.custom[id]||s.o;const o=OPTS[S.sel[id]??0]||OPTS[0];const nm=o.n.split(' · ')[0];
+    const label=s.m+' · '+s.s;
+    if(log==='kg'){
+      const rows=(sets[id]||[]).filter(r=>r&&r.d);
+      if(!rows.length)return;
+      if(day)liftDays.add(day.day);
+      body.push(label+': '+nm,'   '+rows.map(r=>(r.w??0)+' '+S.unit+' × '+(r.r??'?')).join(', ')+(rows.length<3?'  ('+rows.length+' of 3 sets)':''));
+    }else if(log==='min'){
+      if(!dn[id])return;
+      const h=(S.hist[exKey(o,log)]||[]).slice(-1)[0];
+      body.push(label+': '+nm+(h&&h[0]===t?' · '+h[1]+' min':''));
+    }else{
+      const r=sets[id];
+      if(Array.isArray(r)&&r.length&&typeof r[0]==='boolean'){const n=r.filter(Boolean).length;if(!n)return;body.push(label+': '+nm+' · '+n+' of '+r.length+' rounds')}
+      else if(dn[id])body.push(label+': '+o.n+' ✓');
+    }
+  });
+  const days=[...liftDays].map(n=>'Day '+n+' — '+DATA.days[n-1].name);
+  lines.push('Split Day · '+dt.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'}));
+  lines.push(days.length?days.join(' + '):(w.lift?'Day '+w.lift+' — '+DATA.days[w.lift-1].name:w.name));
+  if(recTxt)lines.push('Recovery: '+recTxt);
+  lines.push('');
+  if(body.length)lines.push(...body);else lines.push('Nothing logged yet today.');
+  return {text:lines.join('\n'),empty:!body.length};
+}
+async function shareToday(){
+  const {text,empty}=buildSummary();
+  if(empty){toast('Log at least one set first');return}
+  try{if(navigator.share){await navigator.share({title:'Today\'s workout',text});return}}catch(e){if(e&&e.name==='AbortError')return}
+  try{await navigator.clipboard.writeText(text);toast('Copied. Paste it to your trainer.');return}catch(e){}
+  const ta=document.getElementById('share-text');ta.value=text;ta.hidden=false;ta.select();toast('Select all and copy');
+}
+
 /* ---------- day tabs ---------- */
 function renderDays(){
   const nav=document.getElementById('days');nav.textContent='';
@@ -352,6 +403,8 @@ function render(){
   const bar=el('i');bar.style.width=(tracked.length?100*doneCount/tracked.length:0)+'%';
   head.append(el('div',{class:'progress'},el('div',{class:'bar'},bar),el('span',{},doneCount+' / '+tracked.length+' done today')));
   m.append(el('button',{class:'finish',type:'button',onclick:finishDay},'Finish '+DOW_FULL[w.dow]));
+  m.append(el('button',{class:'btn sharebtn',type:'button',onclick:shareToday},'Share today\'s workout'));
+  m.append(el('textarea',{id:'share-text',class:'sharebox',hidden:'','aria-label':'Workout summary',readonly:''}));
   m.append(backupBox());m.append(credits());
 }
 const sectHead=(eb,title)=>el('div',{class:'sect'},el('div',{class:'eyebrow'},eb),el('h2',{},title));
