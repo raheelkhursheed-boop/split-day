@@ -151,6 +151,20 @@ details.moved summary{font:600 14px var(--body);color:var(--muted);cursor:pointe
 .rounds{display:flex;align-items:center;gap:8px}
 .rounds .rl{font-size:13px;font-weight:600;color:var(--muted);margin-right:auto}
 .tick.big{width:56px;font:700 18px var(--display)}
+.restlbl{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rest{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--fg);color:var(--bg);padding-bottom:env(safe-area-inset-bottom,0px)}
+.rest .rbar{height:4px;background:color-mix(in srgb,var(--bg) 25%,transparent)}
+.rest .rbar i{display:block;height:100%;width:0;background:var(--accent)}
+.rest .rin{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:8px;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.rest .rtxt{flex:1;min-width:0}
+.rest .eyebrow{color:inherit;opacity:.7}
+.rtime{font:700 34px/1 var(--display);font-variant-numeric:tabular-nums}
+.rlab{font-size:12px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rest button{border:1px solid color-mix(in srgb,var(--bg) 35%,transparent);background:none;color:inherit;border-radius:10px;min-width:48px;min-height:44px;font:600 14px var(--body);cursor:pointer}
+.rest button.skip{background:var(--bg);color:var(--fg)}
+.rest.over{background:var(--ok);color:#fff}
+.rest.over .rbar i{background:#fff}
+body.resting main .wrap{padding-bottom:120px}
 </style>
 </head>
 <body>
@@ -169,6 +183,15 @@ details.moved summary{font:600 14px var(--body);color:var(--muted);cursor:pointe
 </header>
 <main><div class="wrap" id="main"><p class="note">Loading your plan…</p></div></main>
 <div class="toast" id="toast" hidden></div>
+<div class="rest" id="rest" hidden role="timer" aria-live="off">
+  <div class="rbar"><i id="rest-bar"></i></div>
+  <div class="rin">
+    <div class="rtxt"><div class="eyebrow">Rest</div><div class="rtime" id="rest-time">0:00</div><div class="rlab" id="rest-label"></div></div>
+    <button type="button" id="rest-minus" onclick="adjustRest(-15)" aria-label="Subtract 15 seconds">−15</button>
+    <button type="button" id="rest-plus" onclick="adjustRest(15)" aria-label="Add 15 seconds">+15</button>
+    <button type="button" id="rest-skip" class="skip" onclick="stopRest()">Skip</button>
+  </div>
+</div>
 
 <script>
 const PLATES=['var(--p1)','var(--p2)','var(--p3)','var(--p4)','var(--p5)'];
@@ -204,6 +227,46 @@ function setUnit(u){
 }
 let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2400)}
 const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const k in attrs){if(k==='class')e.className=attrs[k];else if(k.startsWith('on'))e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!=null)e.setAttribute(k,attrs[k])}for(const c of kids)if(c!=null)e.append(c);return e};
+
+
+/* ---------- rest timer ---------- */
+function restFor(s){
+  if(s.log==='none')return 25;
+  if(/^Abs/.test(s.m))return 60;
+  const lo=parseInt((s.sr.match(/×\s*(\d+)/)||[])[1]||'10',10);
+  return lo<=6?150:lo<=8?120:75;
+}
+const fmtT=x=>{x=Math.max(0,Math.ceil(x));return Math.floor(x/60)+':'+String(x%60).padStart(2,'0')};
+let T={end:0,total:0,label:'',iv:null,ac:null};
+function beep(){try{const ac=T.ac;if(!ac)return;[0,0.25,0.5].forEach(t=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=880;g.gain.setValueAtTime(0.0001,ac.currentTime+t);g.gain.exponentialRampToValueAtTime(0.3,ac.currentTime+t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+t+0.18);o.connect(g).connect(ac.destination);o.start(ac.currentTime+t);o.stop(ac.currentTime+t+0.2)})}catch(e){}}
+function startRest(sec,label){
+  try{T.ac=T.ac||new (window.AudioContext||window.webkitAudioContext)();T.ac.resume&&T.ac.resume()}catch(e){}
+  T.total=sec;T.end=Date.now()+sec*1000;T.label=label;
+  try{sessionStorage.setItem('splitday.rest',JSON.stringify({end:T.end,total:T.total,label}))}catch(e){}
+  tick();clearInterval(T.iv);T.iv=setInterval(tick,250);
+}
+function stopRest(){clearInterval(T.iv);T.end=0;document.getElementById('rest').hidden=true;document.body.classList.remove('resting');try{sessionStorage.removeItem('splitday.rest')}catch(e){}}
+function tick(){
+  const box=document.getElementById('rest');
+  if(!T.end){box.hidden=true;return}
+  const left=(T.end-Date.now())/1000;
+  box.hidden=false;document.body.classList.add('resting');
+  document.getElementById('rest-label').textContent=T.label;
+  const tEl=document.getElementById('rest-time');
+  const bar=document.getElementById('rest-bar');
+  if(left<=0){
+    if(!box.classList.contains('over')){box.classList.add('over');try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}beep()}
+    tEl.textContent='Go';bar.style.width='100%';
+    if(left<-8)stopRest();
+    return;
+  }
+  box.classList.remove('over');
+  tEl.textContent=fmtT(left);
+  bar.style.width=(100*(1-left/T.total))+'%';
+}
+function adjustRest(d){if(!T.end)return;if(T.end<Date.now())T.end=Date.now();T.end+=d*1000;T.total=Math.max(T.total+d,1);document.getElementById('rest').classList.remove('over');tick()}
+try{const r=JSON.parse(sessionStorage.getItem('splitday.rest')||'null');if(r&&r.end>Date.now()){T.end=r.end;T.total=r.total;T.label=r.label;T.iv=setInterval(tick,250)}}catch(e){}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 
 /* ---------- day tabs ---------- */
 function renderDays(){
@@ -303,7 +366,7 @@ function slotCard(id,s,dn){
   const card=el('article',{class:'card'+(dn[id]?' done':'')});
   card.append(el('div',{class:'chead'},
     el('div',{},el('div',{class:'eyebrow'},s.m),el('div',{class:'slot'},s.s)),
-    el('div',{class:'cright'},el('div',{class:'sr'},s.sr),el('button',{type:'button',class:'edit',onclick:()=>{editing.add(id);rerender(card,id,s)}},'Edit options'))));
+    el('div',{class:'cright'},el('div',{class:'sr'},s.sr),(s.log==='min'||(s.log==='none'&&!/^3 rounds/.test(s.sr)))?null:el('div',{class:'restlbl'},'Rest '+fmtT(restFor(s))),el('button',{type:'button',class:'edit',onclick:()=>{editing.add(id);rerender(card,id,s)}},'Edit options'))));
   const opts=el('div',{class:'opts',role:'group','aria-label':'Options for '+s.s});
   OPTS.forEach((op,j)=>opts.append(el('button',{type:'button',class:'opt','aria-pressed':String(j===sel),onclick:()=>{S.sel[id]=j;save();const n=rerender(card,id,s);n.querySelector('.opt[aria-pressed="true"]').scrollIntoView({block:'nearest',inline:'nearest'})}},
     el('span',{class:'eq'},op.eq),el('span',{class:'t'},op.n.split(' · ')[0]))));
@@ -311,8 +374,8 @@ function slotCard(id,s,dn){
   const media=el('div',{class:'media'});
   if(o.img){
     media.append(el('img',{src:'img/'+o.img+'.webp',alt:o.n+' demonstration',loading:'lazy',decoding:'async'}));
-    if(o.ap)media.append(el('span',{class:'tag'},'Similar movement shown'));
-  }else media.append(el('div',{class:'none'},'No animation for this one yet. Pick another option to see a demo.'));
+    if(o.ap)media.append(el('span',{class:'tag'},'Close variation, not exact'));
+  }else media.append(el('div',{class:'none'},'No accurate demo for this one. Pick another option to see one.'));
   card.append(media);
   const body=el('div',{class:'body'});
   const [nm,rx]=o.n.split(' · ');
@@ -358,7 +421,7 @@ function slotCard(id,s,dn){
         ri,
         el('button',{type:'button',class:'tick','aria-pressed':String(row.d),'aria-label':(row.d?'Undo set ':'Complete set ')+(i+1),onclick:()=>{
           if(!row.d){const v=parseFloat(wi.value);row.w=isNaN(v)?row.w:v;const rv=parseInt(ri.value,10);row.r=isNaN(rv)?row.r:rv}
-          row.d=!row.d;commitSets();render()}},'✓')));
+          row.d=!row.d;commitSets();if(row.d){const nxt=rows.findIndex(x=>!x.d);startRest(restFor(s),nxt>=0?'Next: set '+(nxt+1)+' · '+nm:'Next exercise')}render()}},'✓')));
     });
     body.append(box);
     body.append(el('div',{class:'last'},...(le?['Last time: ',el('b',{},(le[2]&&le[2].length?le[2].map(x=>x[0]+'×'+(x[1]||'?')).join(', '):le[1]+' '+S.unit)),(le[2]&&le[2].length?' '+S.unit:''),' on '+fmtDate(le[0])]:['Tap ✓ after each set to log it.'])));
@@ -367,7 +430,7 @@ function slotCard(id,s,dn){
     const rows=S.sets[t0][id]||[false,false,false];
     const box=el('div',{class:'rounds'},el('span',{class:'rl'},'Rounds'));
     rows.forEach((d,i)=>box.append(el('button',{type:'button',class:'tick big','aria-pressed':String(d),'aria-label':'Round '+(i+1),onclick:()=>{
-      rows[i]=!rows[i];S.sets[t0][id]=rows;S.done[t0]=S.done[t0]||{};if(rows.every(Boolean))S.done[t0][id]=true;else delete S.done[t0][id];pruneDone();save();render()}},String(i+1))));
+      rows[i]=!rows[i];S.sets[t0][id]=rows;if(rows[i]){const nx=rows.findIndex(x=>!x);startRest(restFor(s),nx>=0?'Next: round '+(nx+1)+' · '+nm:'Next exercise')}S.done[t0]=S.done[t0]||{};if(rows.every(Boolean))S.done[t0][id]=true;else delete S.done[t0][id];pruneDone();save();render()}},String(i+1))));
     body.append(box);
   }else if(log==='none'){
     body.append(el('div',{class:'log'},doneBtn()));
