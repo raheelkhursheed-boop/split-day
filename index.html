@@ -136,6 +136,21 @@ details.moved{background:var(--surface);border:1px dashed var(--line);border-rad
 details.moved[open]>*+*{margin-top:12px}
 details.moved summary{font:600 14px var(--body);color:var(--muted);cursor:pointer}
 .restcard .body{gap:6px}
+.sets{display:flex;flex-direction:column;gap:6px}
+.shead,.srow{display:grid;grid-template-columns:20px minmax(0,1fr) 56px 44px;gap:6px;align-items:center}
+.shead{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.snum{font:700 18px var(--display);color:var(--muted);text-align:center}
+.step.sm button{width:38px;font-size:20px}
+.step.sm input{font-size:22px;text-align:center;padding:6px 0}
+.step.sm label{justify-content:center}
+.reps::placeholder{color:var(--muted);font-size:16px;opacity:.8}
+.reps{width:100%;min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--fg);font:700 22px var(--display);text-align:center;padding:6px 0;font-variant-numeric:tabular-nums;height:100%}
+.tick{border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:12px;font:700 18px var(--body);cursor:pointer;min-height:44px}
+.tick[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.srow.sdone .step,.srow.sdone .reps{border-color:var(--ok)}
+.rounds{display:flex;align-items:center;gap:8px}
+.rounds .rl{font-size:13px;font-weight:600;color:var(--muted);margin-right:auto}
+.tick.big{width:56px;font:700 18px var(--display)}
 </style>
 </head>
 <body>
@@ -182,7 +197,9 @@ function setUnit(u){
   if(u===S.unit)return;
   const f=u==='lb'?2.20462:1/2.20462, r=u==='lb'?5:2.5;
   for(const k in S.w)if(!k.startsWith('min:'))S.w[k]=Math.round(S.w[k]*f/r)*r;
-  for(const k in S.hist)if(!k.startsWith('min:'))S.hist[k]=S.hist[k].map(([d,w])=>[d,Math.round(w*f/r)*r]);
+  const cv=w=>w==null?w:Math.round(w*f/r)*r;
+  for(const k in S.hist)if(!k.startsWith('min:'))S.hist[k]=S.hist[k].map(e=>e[2]?[e[0],cv(e[1]),e[2].map(x=>[cv(x[0]),x[1]])]:[e[0],cv(e[1])]);
+  for(const d in (S.sets||{}))for(const id in S.sets[d]){const v=S.sets[d][id];if(Array.isArray(v)&&v.length&&typeof v[0]==='object')v.forEach(x=>x.w=cv(x.w))}
   S.unit=u;save();render();
 }
 let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2400)}
@@ -306,11 +323,57 @@ function slotCard(id,s,dn){
     const t=today();S.done[t]=S.done[t]||{};
     if(S.done[t][id]){delete S.done[t][id];if(log!=='none')unlogHist(k)}else{S.done[t][id]=true;extra&&extra()}
     pruneDone();save();render();}},dn[id]?'✓ Done':'Mark done');
-  if(log==='none'){
+  const t0=today();
+  if(log==='kg'){
+    const NS=3;
+    S.sets=S.sets||{};S.sets[t0]=S.sets[t0]||{};
+    const le=lastEntry(k), prev=(le&&le[2])||[];
+    let rows=S.sets[t0][id];
+    if(!rows||rows.length<NS){rows=(rows||[]).slice();while(rows.length<NS){const i=rows.length;rows.push({w:S.w[k]!=null?S.w[k]:(prev[i]?prev[i][0]:null),r:prev[i]?prev[i][1]:null,d:false})}}
+    const commitSets=()=>{S.sets[t0][id]=rows;const ks=Object.keys(S.sets).sort();while(ks.length>14)delete S.sets[ks.shift()];
+      const doneRows=rows.filter(x=>x.d);
+      S.done[t0]=S.done[t0]||{};
+      if(doneRows.length){const top=doneRows[doneRows.length-1].w;if(top!=null)S.w[k]=top;logHist(k,top??0,doneRows.map(x=>[x.w??0,x.r??0]))}else unlogHist(k);
+      if(doneRows.length===rows.length)S.done[t0][id]=true;else delete S.done[t0][id];
+      save()};
+    const tgt=(s.sr.match(/×\s*([\d–-]+)/)||[])[1]||'';
+    const box=el('div',{class:'sets'});
+    box.append(el('div',{class:'shead'},el('span',{},'Set'),el('span',{},'Weight ('+S.unit+')'),el('span',{},'Reps'),el('span',{},'')));
+    rows.forEach((row,i)=>{
+      const wi=el('input',{id:'w-'+id+'-'+i,type:'number',inputmode:'decimal',step:'any',min:'0','aria-label':'Set '+(i+1)+' weight',placeholder:'0',value:row.w!=null?String(row.w):''});
+      const ri=el('input',{id:'r-'+id+'-'+i,class:'reps',type:'number',inputmode:'numeric',min:'0',step:'1','aria-label':'Set '+(i+1)+' reps, target '+(tgt||'any'),placeholder:tgt||'–',value:row.r!=null?String(row.r):''});
+      const setW=v=>{v=Math.max(0,Math.round(v*100)/100);wi.value=String(v);row.w=v;
+        // carry a new weight forward to later sets that aren't done yet
+        for(let j=i+1;j<rows.length;j++)if(!rows[j].d){rows[j].w=v;const e=document.getElementById('w-'+id+'-'+j);if(e)e.value=String(v)}
+        commitSets()};
+      wi.addEventListener('change',()=>{const v=parseFloat(wi.value);if(isNaN(v)){row.w=null;commitSets()}else setW(v)});
+      ri.addEventListener('change',()=>{const v=parseInt(ri.value,10);row.r=isNaN(v)?null:Math.max(0,v);commitSets()});
+      const cw=()=>parseFloat(wi.value)||0;
+      box.append(el('div',{class:'srow'+(row.d?' sdone':'')},
+        el('span',{class:'snum'},String(i+1)),
+        el('div',{class:'step sm'},
+          el('button',{type:'button','aria-label':'Decrease set '+(i+1)+' weight',onclick:()=>setW(cw()-stepFor(log))},'−'),
+          el('label',{for:'w-'+id+'-'+i},wi),
+          el('button',{type:'button','aria-label':'Increase set '+(i+1)+' weight',onclick:()=>setW(cw()+stepFor(log))},'+')),
+        ri,
+        el('button',{type:'button',class:'tick','aria-pressed':String(row.d),'aria-label':(row.d?'Undo set ':'Complete set ')+(i+1),onclick:()=>{
+          if(!row.d){const v=parseFloat(wi.value);row.w=isNaN(v)?row.w:v;const rv=parseInt(ri.value,10);row.r=isNaN(rv)?row.r:rv}
+          row.d=!row.d;commitSets();render()}},'✓')));
+    });
+    body.append(box);
+    body.append(el('div',{class:'last'},...(le?['Last time: ',el('b',{},(le[2]&&le[2].length?le[2].map(x=>x[0]+'×'+(x[1]||'?')).join(', '):le[1]+' '+S.unit)),(le[2]&&le[2].length?' '+S.unit:''),' on '+fmtDate(le[0])]:['Tap ✓ after each set to log it.'])));
+  }else if(log==='none'&&/^3 rounds/.test(s.sr)){
+    S.sets=S.sets||{};S.sets[t0]=S.sets[t0]||{};
+    const rows=S.sets[t0][id]||[false,false,false];
+    const box=el('div',{class:'rounds'},el('span',{class:'rl'},'Rounds'));
+    rows.forEach((d,i)=>box.append(el('button',{type:'button',class:'tick big','aria-pressed':String(d),'aria-label':'Round '+(i+1),onclick:()=>{
+      rows[i]=!rows[i];S.sets[t0][id]=rows;S.done[t0]=S.done[t0]||{};if(rows.every(Boolean))S.done[t0][id]=true;else delete S.done[t0][id];pruneDone();save();render()}},String(i+1))));
+    body.append(box);
+  }else if(log==='none'){
     body.append(el('div',{class:'log'},doneBtn()));
   }else{
     const u=unitFor(log);
-    const inp=el('input',{id:'w-'+id,type:'number',inputmode:'decimal',step:'any',min:'0','aria-label':(log==='min'?'Minutes for ':'Weight for ')+nm,placeholder:'0',value:S.w[k]!=null?String(S.w[k]):''});
+    const inp=el('input',{id:'w-'+id,type:'number',inputmode:'decimal',step:'any',min:'0','aria-label':'Minutes for '+nm,placeholder:'0',value:S.w[k]!=null?String(S.w[k]):''});
     const cur=()=>parseFloat(inp.value)||0;
     const setW=v=>{v=Math.max(0,Math.round(v*100)/100);inp.value=String(v);S.w[k]=v;if(dn[id])logHist(k,v);save()};
     inp.addEventListener('change',()=>{const v=parseFloat(inp.value);if(isNaN(v)){delete S.w[k];save()}else setW(v)});
@@ -321,7 +384,7 @@ function slotCard(id,s,dn){
         el('button',{type:'button','aria-label':'Increase',onclick:()=>setW(cur()+stepFor(log))},'+')),
       doneBtn(()=>{if(inp.value!=='')logHist(k,cur())})));
     const le=lastEntry(k);
-    body.append(el('div',{class:'last'},...(le?['Last time: ',el('b',{},le[1]+' '+u),' on '+fmtDate(le[0])]:[log==='min'?'Set your minutes and tap Mark done to log it.':'No history yet. Set your weight and tap Mark done to log it.'])));
+    body.append(el('div',{class:'last'},...(le?['Last time: ',el('b',{},le[1]+' '+u),' on '+fmtDate(le[0])]:['Set your minutes and tap Mark done to log it.'])));
   }
   const st=o.img&&!o.ap&&DATA.steps[o.img];
   if(st){const ol=el('ol');st.forEach(x=>ol.append(el('li',{},x)));body.append(el('details',{},el('summary',{},'How to do it'),ol))}
@@ -358,7 +421,7 @@ function backupBox(){
       el('button',{type:'button',class:'btn',onclick:async()=>{ta.value=JSON.stringify(S);ta.select();try{await navigator.clipboard.writeText(ta.value);toast('Backup copied')}catch(e){toast('Backup selected. Copy it.')}}},'Copy backup'),
       el('button',{type:'button',class:'btn primary',onclick:()=>{try{const j=JSON.parse(ta.value);if(!j||typeof j!=='object'||!('w' in j))throw 0;S=Object.assign(BLANK(),j);if(!S.rec)S.rec={};if(!S.custom)S.custom={};save();render();toast('Backup restored')}catch(e){toast('That doesn\'t look like a backup')}}},'Restore from text')));
 }
-function logHist(k,w){const t=today();const h=(S.hist[k]=S.hist[k]||[]);if(h.length&&h[h.length-1][0]===t)h[h.length-1][1]=w;else h.push([t,w]);if(h.length>40)h.splice(0,h.length-40)}
+function logHist(k,w,sets){const t=today();const h=(S.hist[k]=S.hist[k]||[]);const e=sets?[t,w,sets]:[t,w];if(h.length&&h[h.length-1][0]===t)h[h.length-1]=e;else h.push(e);if(h.length>40)h.splice(0,h.length-40)}
 function unlogHist(k){const h=S.hist[k];if(h&&h.length&&h[h.length-1][0]===today())h.pop()}
 function pruneDone(){const ks=Object.keys(S.done).sort();while(ks.length>14)delete S.done[ks.shift()]}
 function finishDay(){
