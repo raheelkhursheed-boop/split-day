@@ -296,12 +296,12 @@ function progressFor(s,k){
   const rr=repRange(s.sr);if(!rr)return null;
   const [lo,hi]=rr, sets=le[2], top=Math.max(...sets.map(x=>x[0]||0));
   const inc=S.unit==='kg'?(lo<=8?2.5:1):(lo<=8?5:2.5);
-  const full=sets.length>=3&&sets.every(x=>(x[1]||0)>=hi&&(x[0]||0)>=top);
-  if(full)return{kind:'up',w:Math.round((top+inc)*100)/100,inc,msg:'You hit '+hi+' reps on all 3 sets last time.'};
+  const full=sets.length>=(s.sets||3)&&sets.every(x=>(x[1]||0)>=hi&&(x[0]||0)>=top);
+  if(full)return{kind:'up',w:Math.round((top+inc)*100)/100,inc,msg:'You hit '+hi+' reps on every set last time.'};
   const low=sets.filter(x=>x[1]!=null&&x[1]<lo).length;
   if(low>=2)return{kind:'hold',w:top,msg:'Most sets fell below '+lo+' reps. Stay at '+top+' '+S.unit+' (or drop a step) until you reach '+lo+'+.'};
   const best=Math.max(...sets.filter(x=>(x[0]||0)>=top).map(x=>x[1]||0));
-  return{kind:'build',w:top,msg:'Stay at '+top+' '+S.unit+'. Add reps until all 3 sets reach '+hi+' (best last time: '+best+').'};
+  return{kind:'build',w:top,msg:'Stay at '+top+' '+S.unit+'. Add reps until every set reaches '+hi+' (best last time: '+best+').'};
 }
 function histBox(k){
   const h=(S.hist[k]||[]).filter(e=>e[2]&&e[2].length);
@@ -326,7 +326,7 @@ function histBox(k){
 /* ---------- share today's workout ---------- */
 function allSlots(){
   const out=[];
-  DATA.days.forEach(d=>d.slots.forEach((s,i)=>out.push({id:'d'+d.day+'s'+i,s,day:d})));
+  DATA.days.forEach(d=>d.slots.forEach((s,i)=>{if(!s.off)out.push({id:'d'+d.day+'s'+i,s,day:d})}));
   DATA.week.forEach(w=>w.extras.forEach(x=>x.slots.forEach((s,i)=>out.push({id:'x-'+x.key+'-'+i,s,x}))));
   out.push({id:'x-z2swap-0',s:DATA.z2swap,swap:true});
   return out;
@@ -344,7 +344,7 @@ function buildSummary(){
       const rows=(sets[id]||[]).filter(r=>r&&r.d);
       if(!rows.length)return;
       if(day)liftDays.add(day.day);
-      body.push(label+': '+nm,'   '+rows.map(r=>(r.w??0)+' '+S.unit+' × '+(r.r??'?')).join(', ')+(rows.length<3?'  ('+rows.length+' of 3 sets)':''));
+      body.push(label+': '+nm,'   '+rows.map(r=>(r.w??0)+' '+S.unit+' × '+(r.r??'?')).join(', ')+(rows.length<(s.sets||3)?'  ('+rows.length+' of '+(s.sets||3)+' sets)':''));
     }else if(log==='min'){
       if(!dn[id])return;
       const h=(S.hist[exKey(o,log)]||[]).slice(-1)[0];
@@ -412,7 +412,7 @@ function render(){
   const head=el('section',{class:'dayhead'},
     el('div',{class:'eyebrow'},DOW_FULL[w.dow]+(d?' · Day '+d.day+' of 5':'')),
     el('h1',{},d?d.name:w.name),
-    el('p',{},d?d.focus+' · '+d.slots.length+' lifts':w.focus));
+    el('p',{},d?d.focus+' · '+d.slots.filter(x=>!x.off).length+' lifts':w.focus));
   m.append(head);
   if(w.dow==='Sun'){
     m.append(el('section',{class:'card restcard'},el('div',{class:'body'},
@@ -430,7 +430,7 @@ function render(){
   if(d){
     const liftWrap=swapLift?el('details',{class:'moved'},el('summary',{},'Today\'s lift (do it tomorrow)')):m;
     if(!swapLift)m.append(sectHead('Lifting',d.name));
-    d.slots.forEach((s,i)=>{const id='d'+d.day+'s'+i;if(!swapLift)tracked.push(id);liftWrap.append(slotCard(id,s,dn))});
+    d.slots.forEach((s,i)=>{if(s.off)return;const id='d'+d.day+'s'+i;if(!swapLift)tracked.push(id);liftWrap.append(slotCard(id,s,dn))});
     if(w.absNote)liftWrap.append(el('p',{class:'snote'},w.absNote));
     if(swapLift)m.append(liftWrap);
   }
@@ -493,10 +493,11 @@ function slotCard(id,s,dn){
     pruneDone();save();render();}},dn[id]?'✓ Done':'Mark done');
   const t0=today();
   if(log==='kg'){
-    const NS=3;
+    const NS=s.sets||3;
     S.sets=S.sets||{};S.sets[t0]=S.sets[t0]||{};
     const le=lastEntry(k), prev=(le&&le[2])||[];
     let rows=S.sets[t0][id];
+    if(rows&&rows.length>NS&&!rows.slice(NS).some(x=>x.d))rows=rows.slice(0,NS);
     if(!rows||rows.length<NS){rows=(rows||[]).slice();while(rows.length<NS){const i=rows.length;rows.push({w:S.w[k]!=null?S.w[k]:(prev[i]?prev[i][0]:null),r:prev[i]?prev[i][1]:null,d:false})}}
     const commitSets=()=>{S.sets[t0][id]=rows;const ks=Object.keys(S.sets).sort();while(ks.length>14)delete S.sets[ks.shift()];
       const doneRows=rows.filter(x=>x.d);
@@ -605,7 +606,10 @@ function finishDay(){
   view=nx;render();scrollTo({top:0});
 }
 
-fetch('data.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{DATA=j;render()}).catch(()=>{document.getElementById('main').textContent='Could not load the plan. Reload the page to try again.'});
+fetch('data.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{DATA=j;
+  // Lighter Thu/Fri split starts on DATA.lightFrom
+  if(DATA.lightFrom&&today()>=DATA.lightFrom){DATA.days.forEach(d=>{d.slots.forEach(sl=>{if(sl.light)Object.assign(sl,sl.light)});if(DATA.lightFocus&&DATA.lightFocus[d.day])d.focus=DATA.lightFocus[d.day]});DATA.week.forEach(w=>{if(w.lightAbsNote)w.absNote=w.lightAbsNote})}
+  render()}).catch(()=>{document.getElementById('main').textContent='Could not load the plan. Reload the page to try again.'});
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body>
