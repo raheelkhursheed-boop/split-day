@@ -343,7 +343,7 @@ function volBox(){
 /* ---------- share today's workout ---------- */
 function allSlots(){
   const out=[];
-  DATA.days.forEach(d=>d.slots.forEach((s,i)=>{if(!s.off)out.push({id:'d'+d.day+'s'+i,s,day:d})}));
+  DATA.days.forEach(d=>d.slots.forEach((s,i)=>{if(!s.off)out.push({id:'d'+d.day+'s'+s._i,s,day:d})}));
   DATA.week.forEach(w=>w.extras.forEach(x=>x.slots.forEach((s,i)=>out.push({id:'x-'+x.key+'-'+i,s,x}))));
   out.push({id:'x-z2swap-0',s:DATA.z2swap,swap:true});
   return out;
@@ -448,7 +448,7 @@ function render(){
   if(d){
     const liftWrap=swapLift?el('details',{class:'moved'},el('summary',{},'Today\'s lift (do it tomorrow)')):m;
     if(!swapLift)m.append(sectHead('Lifting',d.name));
-    d.slots.forEach((s,i)=>{if(s.off)return;const id='d'+d.day+'s'+i;if(!swapLift)tracked.push(id);liftWrap.append(slotCard(id,s,dn))});
+    d.slots.forEach(s=>{if(s.off)return;const id='d'+d.day+'s'+s._i;if(!swapLift)tracked.push(id);liftWrap.append(slotCard(id,s,dn))});
     if(w.absNote)liftWrap.append(el('p',{class:'snote'},w.absNote));
     if(swapLift)m.append(liftWrap);
   }
@@ -626,6 +626,7 @@ function finishDay(){
 }
 
 fetch('data.json',{cache:'no-cache'}).then(r=>r.json()).then(j=>{DATA=j;
+  DATA.days.forEach(d=>{d.slots.forEach((sl,i)=>sl._i=i);const mv=d.slots.filter(sl=>sl.at!=null);d.slots=d.slots.filter(sl=>sl.at==null);mv.forEach(sl=>{const k=d.slots.findIndex(x=>x._i===sl.at);d.slots.splice(k<0?d.slots.length:k,0,sl)})});
   // Lighter Thu/Fri split starts on DATA.lightFrom
   if(DATA.lightFrom&&today()>=DATA.lightFrom){DATA.days.forEach(d=>{d.slots.forEach(sl=>{if(sl.light)Object.assign(sl,sl.light)});if(DATA.lightFocus&&DATA.lightFocus[d.day])d.focus=DATA.lightFocus[d.day]});DATA.week.forEach(w=>{if(w.lightAbsNote)w.absNote=w.lightAbsNote})}
   render()}).catch(()=>{document.getElementById('main').textContent='Could not load the plan. Reload the page to try again.'});
