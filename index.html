@@ -53,6 +53,11 @@ main .wrap{padding-block:18px 40px;display:flex;flex-direction:column;gap:14px}
 .dayhead h1{font-family:var(--display);font-weight:700;font-size:34px;line-height:1;margin:0;text-transform:uppercase;letter-spacing:.01em;text-wrap:balance}
 .dayhead p{margin:4px 0 0;color:var(--muted)}
 .vol{margin-top:8px;font-size:14px;font-variant-numeric:tabular-nums}.vol b{font-size:18px}
+.vol.wkline{margin-top:2px;color:var(--muted)}.vol.wkline b{font-size:15px;color:var(--fg)}
+.wk{margin:10px 0 12px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.wkdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px;text-align:center;font-size:12px;color:var(--muted)}
+.wkd{display:grid;gap:4px}.wkb{height:44px;display:flex;align-items:flex-end;background:var(--line);border-radius:4px;overflow:hidden}.wkb i{display:block;width:100%;background:var(--accent)}
+.wkd.now span:last-child{color:var(--fg);font-weight:700}
 .vlist{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:6px;font-size:13px;font-variant-numeric:tabular-nums}
 .vlist li{display:grid;grid-template-columns:92px 1fr auto;gap:8px;align-items:center}
 .vlist .vb{height:8px;border-radius:4px;background:var(--line);overflow:hidden}.vlist .vb i{display:block;height:100%;background:var(--accent)}
@@ -329,13 +334,21 @@ function histBox(k){
 
 /* ---------- total weight moved (volume = weight × reps over logged sets) ---------- */
 function volByDate(){const out={};for(const k in S.hist){if(k.startsWith('min:'))continue;for(const e of S.hist[k]){if(!e[2])continue;let v=0,n=0;e[2].forEach(x=>{const w=+x[0]||0,r=+x[1]||0;if(r>0){v+=w*r;n++}});if(!n)continue;const o=out[e[0]]=out[e[0]]||{v:0,n:0};o.v+=v;o.n+=n}}return out}
-const fmtVol=v=>Math.round(v).toLocaleString()+' '+S.unit;
+const fmtVol=v=>Math.round(v).toLocaleString()+'\u00a0'+S.unit;
+function weekVol(vb,off){const n=new Date();n.setHours(12,0,0,0);n.setDate(n.getDate()-((n.getDay()+6)%7)+7*off);const days=[];let v=0,c=0;
+  for(let i=0;i<7;i++){const x=new Date(n);x.setDate(n.getDate()+i);const d=x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');const dv=vb[d]?vb[d].v:0;days.push({d,v:dv});v+=dv;if(dv)c++}
+  return{days,v,n:c}}
 function volBox(){
   const vb=volByDate(),ds=Object.keys(vb).sort().reverse().slice(0,12);
   if(!ds.length)return null;
   const mx=Math.max(...ds.map(d=>vb[d].v))||1;
+  const wk=weekVol(vb,0),lw=weekVol(vb,-1),wmx=Math.max(...wk.days.map(x=>x.v))||1;
+  const wkBox=el('div',{class:'wk'},
+    el('div',{class:'eyebrow'},'This week · '+fmtDate(wk.days[0].d)+' – '+fmtDate(wk.days[6].d)),
+    el('div',{class:'vol'},el('b',{},fmtVol(wk.v)),' over '+wk.n+' workout'+(wk.n===1?'':'s')+(lw.v?' · last week '+fmtVol(lw.v):'')),
+    el('div',{class:'wkdays'},...wk.days.map((x,i)=>{const b=el('i');b.style.height=(x.v?Math.max(6,100*x.v/wmx):0)+'%';return el('div',{class:'wkd'+(x.d===today()?' now':''),title:x.v?fmtVol(x.v):''},el('span',{class:'wkb'},b),el('span',{},'MTWTFSS'[i]))})));
   return el('section',{class:'card'},el('div',{class:'body'},
-    el('div',{class:'slot'},'Total weight moved'),
+    el('div',{class:'slot'},'Total weight moved'),wkBox,
     el('p',{class:'last'},'Weight × reps added up over every set you ticked, per workout.'),
     el('ul',{class:'vlist'},...ds.map(d=>{const b=el('i');b.style.width=(100*vb[d].v/mx)+'%';
       return el('li',{},el('span',{},fmtDate(d)),el('span',{class:'vb'},b),el('b',{},fmtVol(vb[d].v)))}))));
@@ -378,7 +391,7 @@ function buildSummary(){
   if(recTxt)lines.push('Recovery: '+recTxt);
   lines.push('');
   if(body.length)lines.push(...body);else lines.push('Nothing logged yet today.');
-  const tv=volByDate()[t];if(tv&&tv.v)lines.push('','Total weight moved: '+fmtVol(tv.v)+' ('+tv.n+' sets)');
+  const vbA=volByDate(),tv=vbA[t];if(tv&&tv.v)lines.push('','Total weight moved: '+fmtVol(tv.v)+' ('+tv.n+' sets)');const wv=weekVol(vbA,0);if(wv.v)lines.push('This week so far: '+fmtVol(wv.v)+' over '+wv.n+' workout'+(wv.n===1?'':'s'));
   return {text:lines.join('\n'),empty:!body.length};
 }
 async function shareToday(){
@@ -472,7 +485,7 @@ function render(){
   const doneCount=tracked.filter(id=>dn[id]).length;
   const bar=el('i');bar.style.width=(tracked.length?100*doneCount/tracked.length:0)+'%';
   head.append(el('div',{class:'progress'},el('div',{class:'bar'},bar),el('span',{},doneCount+' / '+tracked.length+' done today')));
-  if(view===todayIdx()){const tv=volByDate()[t];if(tv&&tv.v)head.append(el('div',{class:'vol'},'Moved today: ',el('b',{},fmtVol(tv.v)),' over '+tv.n+' set'+(tv.n>1?'s':'')))}
+  if(view===todayIdx()){const vbH=volByDate(),tv=vbH[t],wv=weekVol(vbH,0);if(tv&&tv.v)head.append(el('div',{class:'vol'},'Moved today: ',el('b',{},fmtVol(tv.v)),' over '+tv.n+' set'+(tv.n>1?'s':'')));if(wv.v)head.append(el('div',{class:'vol wkline'},'This week: ',el('b',{},fmtVol(wv.v)),' over '+wv.n+' workout'+(wv.n===1?'':'s')))}
   m.append(el('button',{class:'finish',type:'button',onclick:finishDay},'Finish '+DOW_FULL[w.dow]));
   m.append(el('button',{class:'btn sharebtn',type:'button',onclick:shareToday},'Share today\'s workout'));
   m.append(el('textarea',{id:'share-text',class:'sharebox',hidden:'','aria-label':'Workout summary',readonly:''}));
