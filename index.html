@@ -52,6 +52,10 @@ header .wrap{padding-block:10px;display:flex;flex-direction:column;gap:10px}
 main .wrap{padding-block:18px 40px;display:flex;flex-direction:column;gap:14px}
 .dayhead h1{font-family:var(--display);font-weight:700;font-size:34px;line-height:1;margin:0;text-transform:uppercase;letter-spacing:.01em;text-wrap:balance}
 .dayhead p{margin:4px 0 0;color:var(--muted)}
+.vol{margin-top:8px;font-size:14px;font-variant-numeric:tabular-nums}.vol b{font-size:18px}
+.vlist{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:6px;font-size:13px;font-variant-numeric:tabular-nums}
+.vlist li{display:grid;grid-template-columns:92px 1fr auto;gap:8px;align-items:center}
+.vlist .vb{height:8px;border-radius:4px;background:var(--line);overflow:hidden}.vlist .vb i{display:block;height:100%;background:var(--accent)}
 .progress{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .bar{flex:1;height:6px;border-radius:3px;background:var(--sunk);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
@@ -323,6 +327,19 @@ function histBox(k){
     svg?el('div',{class:'sparkwrap'},svg,el('div',{class:'sax'},el('span',{},Math.min(...pts)+' '+S.unit),el('span',{},Math.max(...pts)+' '+S.unit))):null,ul);
 }
 
+/* ---------- total weight moved (volume = weight × reps over logged sets) ---------- */
+function volByDate(){const out={};for(const k in S.hist){if(k.startsWith('min:'))continue;for(const e of S.hist[k]){if(!e[2])continue;let v=0,n=0;e[2].forEach(x=>{const w=+x[0]||0,r=+x[1]||0;if(r>0){v+=w*r;n++}});if(!n)continue;const o=out[e[0]]=out[e[0]]||{v:0,n:0};o.v+=v;o.n+=n}}return out}
+const fmtVol=v=>Math.round(v).toLocaleString()+' '+S.unit;
+function volBox(){
+  const vb=volByDate(),ds=Object.keys(vb).sort().reverse().slice(0,12);
+  if(!ds.length)return null;
+  const mx=Math.max(...ds.map(d=>vb[d].v))||1;
+  return el('section',{class:'card'},el('div',{class:'body'},
+    el('div',{class:'slot'},'Total weight moved'),
+    el('p',{class:'last'},'Weight × reps added up over every set you ticked, per workout.'),
+    el('ul',{class:'vlist'},...ds.map(d=>{const b=el('i');b.style.width=(100*vb[d].v/mx)+'%';
+      return el('li',{},el('span',{},fmtDate(d)),el('span',{class:'vb'},b),el('b',{},fmtVol(vb[d].v)))}))));
+}
 /* ---------- share today's workout ---------- */
 function allSlots(){
   const out=[];
@@ -361,6 +378,7 @@ function buildSummary(){
   if(recTxt)lines.push('Recovery: '+recTxt);
   lines.push('');
   if(body.length)lines.push(...body);else lines.push('Nothing logged yet today.');
+  const tv=volByDate()[t];if(tv&&tv.v)lines.push('','Total weight moved: '+fmtVol(tv.v)+' ('+tv.n+' sets)');
   return {text:lines.join('\n'),empty:!body.length};
 }
 async function shareToday(){
@@ -454,10 +472,11 @@ function render(){
   const doneCount=tracked.filter(id=>dn[id]).length;
   const bar=el('i');bar.style.width=(tracked.length?100*doneCount/tracked.length:0)+'%';
   head.append(el('div',{class:'progress'},el('div',{class:'bar'},bar),el('span',{},doneCount+' / '+tracked.length+' done today')));
+  if(view===todayIdx()){const tv=volByDate()[t];if(tv&&tv.v)head.append(el('div',{class:'vol'},'Moved today: ',el('b',{},fmtVol(tv.v)),' over '+tv.n+' set'+(tv.n>1?'s':'')))}
   m.append(el('button',{class:'finish',type:'button',onclick:finishDay},'Finish '+DOW_FULL[w.dow]));
   m.append(el('button',{class:'btn sharebtn',type:'button',onclick:shareToday},'Share today\'s workout'));
   m.append(el('textarea',{id:'share-text',class:'sharebox',hidden:'','aria-label':'Workout summary',readonly:''}));
-  m.append(backupBox());m.append(credits());
+  m.append(volBox()||'');m.append(backupBox());m.append(credits());
 }
 const sectHead=(eb,title)=>el('div',{class:'sect'},el('div',{class:'eyebrow'},eb),el('h2',{},title));
 const credits=()=>el('p',{class:'note'},'Animations: free-exercise-db (public domain). Where a machine or cable version has no animation of its own, a close variation is shown and marked.');
